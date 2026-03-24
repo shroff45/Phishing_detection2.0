@@ -1,0 +1,58 @@
+# PhishGuard — Weekly Model Retraining
+# Runs every Sunday at 2:00 AM UTC
+
+name: Weekly Model Retrain
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"  # Every Sunday at 2 AM UTC
+  workflow_dispatch:       # Allow manual trigger
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install training dependencies
+        run: |
+          cd ml-training
+          pip install -r requirements.txt
+
+      - name: Run retraining pipeline
+        run: |
+          cd ml-training
+          python retrain_pipeline.py
+
+      - name: Check if model was updated
+        id: check_model
+        run: |
+          if git diff --name-only | grep -q "url_classifier.onnx"; then
+            echo "model_updated=true" >> $GITHUB_OUTPUT
+          else
+            echo "model_updated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit updated model
+        if: steps.check_model.outputs.model_updated == 'true'
+        run: |
+          git config user.name "PhishGuard Bot"
+          git config user.email "bot@phishguard.dev"
+          git add extension/models/url_classifier.onnx
+          git add backend/models/url_classifier.onnx
+          git add ml-training/reports/
+          git add ml-training/retrain_logs/
+          git commit -m "chore: auto-retrain model $(date +%Y-%m-%d)"
+          git push
+
+      - name: Upload training reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-reports
+          path: ml-training/reports/
+          retention-days: 30

@@ -1,0 +1,22 @@
+# PhishGuard Backend Dependencies
+# Version ranges instead of pins — avoids conflicts with other packages
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+numpy>=1.24.0
+structlog>=23.2.0
+tldextract>=5.1.0
+slowapi>=0.1.9
+httpx>=0.25.0
+python-whois>=0.8.0
+Pillow>=10.1.0
+scipy>=1.11.0
+easyocr>=1.7.0
+python-multipart>=0.0.6
+anyio>=4.8.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+

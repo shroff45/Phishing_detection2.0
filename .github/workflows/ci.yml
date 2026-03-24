@@ -1,0 +1,69 @@
+# PhishGuard — CI Pipeline
+# Runs on every push and pull request
+
+name: PhishGuard CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Backend Tests ────────────────────────────────────────
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Syntax check all Python files
+        run: |
+          cd backend
+          python -m py_compile app/__init__.py
+          python -m py_compile app/config.py
+          python -m py_compile app/main.py
+          python -m py_compile app/services/__init__.py
+          python -m py_compile app/services/threat_intel.py
+          python -m py_compile app/services/visual_analyzer.py
+          python -m py_compile app/services/feed_manager.py
+
+      - name: Run tests
+        run: |
+          cd backend
+          pytest ../tests/ -v --tb=short
+
+  # ── Extension Lint ───────────────────────────────────────
+  extension-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifest.json
+        run: |
+          python -c "
+          import json
+          with open('extension/manifest.json') as f:
+              m = json.load(f)
+          assert m['manifest_version'] == 3
+          assert 'service_worker' in m['background']
+          print('manifest.json is valid MV3')
+          "
+
+      - name: Check JS syntax
+        run: |
+          node --check extension/background/service-worker.js
+          node --check extension/content/content-script.js
+          node --check extension/offscreen/offscreen.js
+          node --check extension/popup/popup.js
+          node --check extension/options/options.js

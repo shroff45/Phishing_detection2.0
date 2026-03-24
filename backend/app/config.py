@@ -1,0 +1,34 @@
+"""PhishGuard backend configuration via environment variables."""
+
+from pydantic import Field
+
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback for pydantic v1 or missing pydantic-settings
+    from pydantic import BaseSettings  # type: ignore
+
+
+class Settings(BaseSettings):
+    # Server
+    HOST: str = Field(default="0.0.0.0")
+    PORT: int = Field(default=8000)
+    DEBUG: bool = Field(default=True)
+
+    # Redis (optional — server works fine without it)
+    REDIS_URL: str = Field(default="redis://localhost:6379/0")
+
+    # Threat intelligence API keys (optional — enhances detection)
+    PHISHTANK_API_KEY: str = Field(default="")
+    VIRUSTOTAL_API_KEY: str = Field(default="")
+
+    # Rate limiting
+    RATE_LIMIT: str = Field(default="100/minute")
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+
+settings = Settings()
