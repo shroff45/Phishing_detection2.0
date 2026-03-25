@@ -99,7 +99,10 @@ async def analyze_quick(request: QuickCheckRequest):
             "confidence": meta.get("confidence", 0.0),
             "reasons": meta.get("reasons", []),
             "signals": meta.get("signals", []),
-            "threat_feed": threat_result
+            "threat_feed": threat_result,
+            "feeds_checked": meta.get("feeds_checked", []),
+            "feeds_flagged": meta.get("feeds_flagged", []),
+            "source": meta.get("source", "local_ml")
         }
     except Exception as e:
         logger.error("quick_analysis_failed", error=str(e), url=str(request.url))
@@ -130,7 +133,10 @@ async def analyze_full(request: FullAnalysisRequest):
             "reasons": meta.get("reasons", []),
             "signals": meta.get("signals", []),
             "threat_feed": threat_result,
-            "visual_analysis": visual_result
+            "visual_analysis": visual_result,
+            "feeds_checked": meta.get("feeds_checked", []),
+            "feeds_flagged": meta.get("feeds_flagged", []),
+            "source": meta.get("source", "local_ml")
         }
     except Exception as e:
         logger.error("full_analysis_failed", error=str(e), url=str(request.url))

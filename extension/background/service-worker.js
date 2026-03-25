@@ -40,7 +40,23 @@ async function loadModel() {
 loadModel();
 
 // ── Constants ─────────────────────────────────────────────────────────────
-const BACKEND_URL = "http://localhost:7860";
+let BACKEND_URL = "http://localhost:7860"; // fallback default
+
+// Load from settings
+chrome.storage.local.get(['settings'], (result) => {
+  if (result.settings?.backendUrl) {
+    BACKEND_URL = result.settings.backendUrl;
+    console.log('[PhishGuard] Backend URL loaded:', BACKEND_URL);
+  }
+});
+
+// Listen for runtime changes
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.settings?.newValue?.backendUrl) {
+    BACKEND_URL = changes.settings.newValue.backendUrl;
+    console.log('[PhishGuard] Backend URL updated:', BACKEND_URL);
+  }
+});
 const EXTENSION_API_KEY = "phishguard-dev-key"; // Should match .env
 
 

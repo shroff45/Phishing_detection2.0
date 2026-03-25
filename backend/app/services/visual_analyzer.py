@@ -226,6 +226,7 @@ class VisualAnalyzer:
                 "similarity_score": round(highest_score, 3),
                 "brand_detected": best_match if highest_score > 0.4 else None,
                 "is_impersonation": bool(highest_score > 0.45 and not is_legit),
+                "confidence": round(highest_score, 3) if highest_score > 0.45 else 0.0,
                 "details": match_details
             }
             
