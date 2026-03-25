@@ -462,6 +462,10 @@ def compute_meta_score(
     hostname = (parsed.netloc or "").lower()
     path_lower = (parsed.path or "").lower()
     
+    # ── WHOIS Domain Age check ──
+    whois_score, whois_reason = _check_domain_age(hostname)
+    heuristic_score += whois_score
+    
     # ── IP-based hosting should trigger IMMEDIATE high score ──
     ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
     host_only = hostname.split(':')[0]
@@ -543,6 +547,8 @@ def compute_meta_score(
     if threat_feed_result and threat_feed_result.get("is_known_threat"):
         source = threat_feed_result.get("source", "unknown")
         reasons.append(f"URL found in threat intelligence feed ({source})")
+    if whois_reason:
+        reasons.append(whois_reason)
     
     if not reasons:
         reasons = ["No significant phishing indicators detected"]

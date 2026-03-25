@@ -464,6 +464,25 @@ async function analyzeUrl(tabId, url) {
     return;
   }
 
+  // ── STEP 1b: IP Phishing block ──────────────────────────────────────
+  const ipv4Match = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
+  if (ipv4Match) {
+    const isPrivate = hostname.startsWith("127.") || 
+                      hostname.startsWith("192.168.") || 
+                      hostname.startsWith("10.") || 
+                      hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./);
+    if (!isPrivate) {
+      const result = {
+        url, verdict: "phishing", score: 0.95, source: "ip_rule",
+        reasons: ["URL uses a public IP address instead of a domain name"],
+      };
+      storeResult(tabId, result);
+      updateBadge(tabId, "phishing");
+      console.log(`[PhishGuard] IP BLOCKED: ${hostname}`);
+      return;
+    }
+  }
+
   // ── STEP 2: ML inference ────────────────────────────────────────────
   const features = extractLexicalFeatures(url);
   if (!features) { updateBadge(tabId, "safe"); return; }
