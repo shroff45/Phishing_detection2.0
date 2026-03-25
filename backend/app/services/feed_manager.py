@@ -24,8 +24,8 @@ logger = structlog.get_logger()
 CHROME_DYNAMIC_RULE_LIMIT = 30_000
 MAX_URLS_PER_SOURCE = 10_000
 
-OPENPHISH_FEED = "https://openphish.com/feed.txt"
-PHISHTANK_FEED = "http://data.phishtank.com/data/online-valid.csv"
+OPENPHISH_FEED = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt"
+PHISHTANK_FEED = "https://data.phishtank.com/data/online-valid.csv"
 PHISHING_DB_DOMAINS = "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt"
 URLHAUS_FEED = "https://urlhaus.abuse.ch/downloads/text_online/"
 
