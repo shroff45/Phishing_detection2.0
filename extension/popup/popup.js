@@ -98,10 +98,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     loading.classList.add("hidden");
     content.classList.remove("hidden");
 
-    const verdict = result.verdict || "unknown";
-    const score   = result.score || 0;
-    const reasons = result.reasons || [];
-    const source  = result.source || "unknown";
+    // Defensive field access to prevent UI crashes on partial APIs
+    const safeResults = {
+      score: result?.score ?? 0,
+      verdict: result?.verdict ?? "unknown",
+      reasons: result?.reasons ?? [],
+      source: result?.source ?? "unknown",
+      feeds_checked: result?.feeds_checked ?? [],
+      feeds_flagged: result?.feeds_flagged ?? []
+    };
+
+    const verdict = safeResults.verdict;
+    const score   = safeResults.score;
+    const reasons = safeResults.reasons;
+    const source  = safeResults.source;
     const pct     = Math.round(score * 100);
 
     // Status card class
