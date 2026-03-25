@@ -554,10 +554,13 @@ def compute_meta_score(
         reasons = ["No significant phishing indicators detected"]
     
     return {
-        "final_score": round(final_score, 4),
+        "score": round(final_score, 4),
         "verdict": verdict,
         "confidence": round(confidence, 4),
         "reasons": reasons,
+        "source": threat_feed_result.get("source") if threat_feed_result else None,
+        "feeds_checked": threat_feed_result.get("feeds_checked", []) if threat_feed_result else [],
+        "feeds_flagged": threat_feed_result.get("feeds_flagged", []) if threat_feed_result else [],
         "signals": [
             f"heuristic_score={round(heuristic_score, 2)}",
             f"threat_intel_score={round(ti_score, 2)}",

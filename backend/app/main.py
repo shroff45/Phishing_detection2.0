@@ -95,9 +95,12 @@ async def analyze_quick(request: QuickCheckRequest):
         return {
             "url": request.url, 
             "verdict": meta["verdict"], 
-            "score": meta["final_score"], 
+            "score": meta["score"], 
             "confidence": meta.get("confidence", 0.0),
             "reasons": meta.get("reasons", []),
+            "source": meta.get("source"),
+            "feeds_checked": meta.get("feeds_checked", []),
+            "feeds_flagged": meta.get("feeds_flagged", []),
             "signals": meta.get("signals", []),
             "threat_feed": threat_result
         }
@@ -125,9 +128,12 @@ async def analyze_full(request: FullAnalysisRequest):
         return {
             "url": request.url, 
             "verdict": meta["verdict"], 
-            "score": meta["final_score"], 
+            "score": meta["score"], 
             "confidence": meta.get("confidence", 0.0),
             "reasons": meta.get("reasons", []),
+            "source": meta.get("source"),
+            "feeds_checked": meta.get("feeds_checked", []),
+            "feeds_flagged": meta.get("feeds_flagged", []),
             "signals": meta.get("signals", []),
             "threat_feed": threat_result,
             "visual_analysis": visual_result
