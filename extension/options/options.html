@@ -4,199 +4,365 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PhishGuard — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ── Obsidian Shield — Settings Page ── */
+    :root {
+      --surface-base:             #131313;
+      --surface-lowest:           #0e0e0e;
+      --surface-container:        #201f1f;
+      --surface-container-high:   #2a2a2a;
+      --surface-container-highest:#353534;
+      --surface-bright:           #393939;
+      --primary:                  #78dc77;
+      --primary-container:        #4caf50;
+      --on-primary:               #00390a;
+      --on-primary-container:     #003c0b;
+      --error:                    #ffb4ab;
+      --error-container:          #93000a;
+      --secondary:                #bdc2ff;
+      --secondary-container:      #343d96;
+      --on-surface:               #e5e2e1;
+      --on-surface-variant:       #becab9;
+      --outline:                  #899484;
+      --outline-variant:          rgba(63, 74, 60, 0.15);
+      --transition-smooth:        300ms cubic-bezier(0.4, 0, 0.2, 1);
+      --radius-md:                0.75rem;
+      --radius-lg:                1rem;
+      --radius-xl:                1.5rem;
+      --radius-full:              9999px;
+    }
+
+    *, *::before, *::after {
+      margin: 0; padding: 0; box-sizing: border-box;
+    }
 
     body {
-      max-width: 640px;
+      max-width: 580px;
       margin: 0 auto;
-      padding: 32px 24px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f9fafb;
-      color: #1a1a2e;
+      padding: 40px 24px 48px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--surface-base);
+      color: var(--on-surface);
       line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
     }
 
+    /* ── Header ── */
     .pg-header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 36px;
+      animation: fadeIn 0.5s ease;
     }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
     .pg-header h1 {
-      font-size: 24px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
       font-weight: 700;
-      margin-bottom: 4px;
+      letter-spacing: 0.04em;
+      color: var(--on-surface);
+      margin-bottom: 6px;
     }
+
     .pg-header p {
       font-size: 13px;
-      color: #64748b;
+      color: var(--outline);
     }
 
+    /* ── Privacy Notice ── */
+    .pg-privacy-notice {
+      background: rgba(120, 220, 119, 0.06);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: var(--on-surface-variant);
+      line-height: 1.7;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pg-privacy-notice::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-container));
+    }
+
+    .pg-privacy-notice strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    /* ── Sections ── */
     .pg-section {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
+      background: var(--surface-container);
+      border-radius: var(--radius-lg);
       padding: 24px;
       margin-bottom: 16px;
-    }
-    .pg-section h2 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      color: #1a1a2e;
-      border-bottom: 1px solid #f1f5f9;
-      padding-bottom: 8px;
+      transition: background var(--transition-smooth);
     }
 
+    .pg-section h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--on-surface);
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      position: relative;
+    }
+
+    .pg-section h2::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--outline-variant);
+    }
+
+    /* ── Settings Row ── */
     .pg-setting {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      padding: 12px 0;
-      border-bottom: 1px solid #f8fafc;
-    }
-    .pg-setting:last-child { border-bottom: none; }
-    .pg-setting-info { flex: 1; padding-right: 16px; }
-    .pg-setting-label {
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 2px;
-    }
-    .pg-setting-desc {
-      font-size: 12px;
-      color: #94a3b8;
+      padding: 16px 0;
+      gap: 20px;
     }
 
+    .pg-setting + .pg-setting {
+      position: relative;
+    }
+
+    .pg-setting-info { flex: 1; }
+
+    .pg-setting-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--on-surface);
+      margin-bottom: 4px;
+    }
+
+    .pg-setting-desc {
+      font-size: 12px;
+      color: var(--outline);
+      line-height: 1.6;
+    }
+
+    /* ── Toggle ── */
     .pg-toggle {
       position: relative;
-      width: 44px;
-      height: 24px;
+      width: 48px;
+      height: 26px;
       flex-shrink: 0;
       margin-top: 2px;
     }
+
     .pg-toggle input {
       opacity: 0;
       width: 0;
       height: 0;
     }
+
     .pg-toggle-slider {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: #cbd5e1;
-      border-radius: 24px;
+      background: var(--surface-container-highest);
+      border-radius: var(--radius-full);
       cursor: pointer;
-      transition: 0.2s;
+      transition: all var(--transition-smooth);
     }
+
     .pg-toggle-slider::before {
       content: "";
       position: absolute;
-      height: 18px;
-      width: 18px;
+      height: 20px;
+      width: 20px;
       left: 3px;
       bottom: 3px;
-      background: #fff;
+      background: var(--on-surface-variant);
       border-radius: 50%;
-      transition: 0.2s;
-    }
-    .pg-toggle input:checked + .pg-toggle-slider {
-      background: #16a34a;
-    }
-    .pg-toggle input:checked + .pg-toggle-slider::before {
-      transform: translateX(20px);
+      transition: all var(--transition-smooth);
     }
 
-    .pg-input-group {
-      margin-top: 12px;
+    .pg-toggle input:checked + .pg-toggle-slider {
+      background: var(--primary-container);
     }
+
+    .pg-toggle input:checked + .pg-toggle-slider::before {
+      transform: translateX(22px);
+      background: var(--primary);
+      box-shadow: 0 0 8px rgba(120, 220, 119, 0.4);
+    }
+
+    /* ── Input Group ── */
+    .pg-input-group {
+      margin-top: 16px;
+    }
+
     .pg-input-group label {
       display: block;
       font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 4px;
-    }
-    .pg-input-group input[type="text"] {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      font-size: 13px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .pg-input-group input[type="text"]:focus {
-      border-color: #3b82f6;
-    }
-    .pg-input-group .pg-hint {
-      font-size: 11px;
-      color: #94a3b8;
-      margin-top: 4px;
+      font-weight: 600;
+      color: var(--on-surface);
+      margin-bottom: 8px;
     }
 
+    .pg-input-group input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--surface-container-highest);
+      border: none;
+      border-radius: var(--radius-md);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: var(--on-surface);
+      outline: none;
+      transition: all var(--transition-smooth);
+    }
+
+    .pg-input-group input[type="text"]::placeholder {
+      color: var(--outline);
+    }
+
+    .pg-input-group input[type="text"]:focus {
+      background: var(--surface-bright);
+      box-shadow: 0 0 0 2px rgba(189, 194, 255, 0.15);
+    }
+
+    .pg-hint {
+      font-size: 11px;
+      color: var(--outline);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    /* ── Buttons ── */
     .pg-btn-save {
       display: block;
       width: 100%;
-      padding: 12px;
-      background: #1a1a2e;
-      color: #fff;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-container));
+      color: var(--on-primary-container);
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-xl);
+      font-family: 'Inter', sans-serif;
       font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 28px;
+      transition: all var(--transition-smooth);
+      letter-spacing: 0.02em;
+      box-shadow: 0 2px 16px rgba(76, 175, 80, 0.2);
+    }
+
+    .pg-btn-save:hover {
+      box-shadow: 0 4px 24px rgba(76, 175, 80, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .pg-btn-save:active {
+      transform: scale(0.98);
+    }
+
+    .pg-btn-action {
+      padding: 10px 18px;
+      background: var(--surface-container-high);
+      color: var(--on-surface);
+      border: none;
+      border-radius: var(--radius-md);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      margin-top: 24px;
-      transition: background 0.15s;
+      transition: all var(--transition-smooth);
     }
-    .pg-btn-save:hover { background: #16213e; }
 
+    .pg-btn-action:hover {
+      background: var(--surface-container-highest);
+    }
+
+    .pg-btn-action:active {
+      transform: scale(0.97);
+    }
+
+    .pg-btn-danger {
+      color: var(--error);
+    }
+
+    .pg-btn-export {
+      color: var(--secondary);
+    }
+
+    /* ── Status Message ── */
     .pg-status-msg {
       text-align: center;
       font-size: 13px;
-      margin-top: 12px;
-      color: #16a34a;
-      display: none;
-    }
-
-    .pg-privacy-notice {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
-      font-size: 13px;
-      color: #1e40af;
-      line-height: 1.5;
-    }
-    .pg-privacy-notice strong {
-      display: block;
-      margin-bottom: 4px;
-    }
-
-    .pg-data-section {
+      font-weight: 600;
       margin-top: 16px;
-    }
-    .pg-btn-danger {
-      padding: 8px 16px;
-      background: #fff;
-      color: #dc2626;
-      border: 1px solid #fecaca;
-      border-radius: 6px;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .pg-btn-danger:hover {
-      background: #fef2f2;
-      border-color: #dc2626;
+      color: var(--primary);
+      display: none;
+      animation: fadeIn 0.3s ease;
     }
 
+    /* ── Data Section ── */
+    .pg-data-section {
+      padding: 16px 0;
+    }
+
+    .pg-data-section + .pg-data-section {
+      position: relative;
+    }
+
+    .pg-data-section p {
+      font-size: 12px;
+      color: var(--outline);
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+
+    /* ── Footer ── */
     .pg-footer {
       text-align: center;
-      margin-top: 24px;
+      margin-top: 28px;
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--outline);
+      letter-spacing: 0.04em;
     }
+
     .pg-footer a {
-      color: #3b82f6;
+      color: var(--secondary);
       text-decoration: none;
+      transition: color var(--transition-smooth);
+    }
+
+    .pg-footer a:hover {
+      color: #dee0ff;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--surface-container-highest);
+      border-radius: var(--radius-full);
     }
   </style>
 </head>
@@ -242,7 +408,7 @@
   </div>
 
   <div class="pg-section">
-    <h2>Privacy &amp; Backend Analysis</h2>
+    <h2>Privacy & Backend Analysis</h2>
 
     <div class="pg-setting">
       <div class="pg-setting-info">
@@ -273,20 +439,20 @@
     <h2>Data Management</h2>
 
     <div class="pg-data-section">
-      <p style="font-size:13px;color:#64748b;margin-bottom:12px;">
+      <p>
         Clear all cached scan results and statistics stored locally
         in your browser. This does not affect threat feed blocklists.
       </p>
-      <button class="pg-btn-danger" id="btn-clear-cache">
+      <button class="pg-btn-action pg-btn-danger" id="btn-clear-cache">
         🗑️ Clear Cached Data
       </button>
     </div>
 
-    <div class="pg-data-section" style="margin-top:16px;">
-      <p style="font-size:13px;color:#64748b;margin-bottom:12px;">
+    <div class="pg-data-section">
+      <p>
         Export your scan statistics as a JSON file for review.
       </p>
-      <button class="pg-btn-danger" id="btn-export-data" style="color:#3b82f6;border-color:#bfdbfe;">
+      <button class="pg-btn-action pg-btn-export" id="btn-export-data">
         📥 Export My Data
       </button>
     </div>
@@ -296,7 +462,7 @@
   <div class="pg-status-msg" id="status-msg">Settings saved successfully!</div>
 
   <div class="pg-footer">
-    PhishGuard v0.3.0 — Built at VIT for public welfare<br>
+    PhishGuard v1.0.0 — Built at VIT for public welfare<br>
     <a href="https://github.com/YOUR_REPO/phishguard/blob/main/PRIVACY.md" target="_blank">
       Privacy Policy
     </a>

@@ -31,6 +31,13 @@ URLHAUS_FEED = "https://urlhaus.abuse.ch/downloads/text_online/"
 
 FEED_TIMEOUT_SECONDS = 30
 
+# ── Global Whitelist ──
+GLOBAL_WHITELIST = {
+    "google.com", "github.com", "microsoft.com", "stackoverflow.com",
+    "reddit.com", "youtube.com", "linkedin.com", "twitter.com", "x.com",
+    "facebook.com", "amazon.com", "apple.com", "localhost", "127.0.0.1"
+}
+
 # Module-level state for persistence across refreshes
 _cached_rules: list = []
 _cached_domains: set = set()
@@ -180,7 +187,12 @@ class FeedManager:
         return await refresh_threat_feeds()
 
     def is_domain_blocked(self, domain: str) -> bool:
-        return domain.lower() in _cached_domains
+        d = domain.lower()
+        # Never block whitelisted domains
+        for safe in GLOBAL_WHITELIST:
+            if d == safe or d.endswith("." + safe):
+                return False
+        return d in _cached_domains
 
     def get_rules(self, limit: int = 5000, offset: int = 0) -> list:
         return _cached_rules[offset : offset + limit]

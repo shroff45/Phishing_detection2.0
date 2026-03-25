@@ -16,9 +16,12 @@ class TestHealthEndpoint:
 
 class TestQuickAnalyze:
     def test_quick_safe_url(self):
-        response = client.post("/api/v1/analyze/quick", json={
-            "url": "https://www.google.com/",
-            "client_score": 0.1,
-        })
+        response = client.post("/api/v1/analyze/quick", 
+            json={
+                "url": "https://www.google.com/",
+                "client_score": 0.1,
+            },
+            headers={"X-API-Key": "phishguard-dev-key"}
+        )
         assert response.status_code == 200
         assert "verdict" in response.json()

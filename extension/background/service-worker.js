@@ -1,12 +1,14 @@
 /**
  * PhishGuard — Service Worker (Manifest V3)
+ * FIXED: Verdict monotonicity, suspicious hosting detection, path keyword boost
  * 
  * Runs in the background. Responsibilities:
  *   1. Extract 30 lexical features from every navigated URL
  *   2. Run local ONNX inference for instant scoring
- *   3. Escalate ambiguous URLs (score 0.3–0.8) to backend with screenshot
+ *   3. Escalate ambiguous URLs to backend with screenshot
  *   4. Update badge icon based on verdict
  *   5. Periodically sync threat feed rules from backend
+ *   6. NEVER downgrade a phishing verdict from backend
  */
 
 // ── ONNX Runtime Setup ────────────────────────────────────────────────────
@@ -38,7 +40,9 @@ async function loadModel() {
 loadModel();
 
 // ── Constants ─────────────────────────────────────────────────────────────
-const BACKEND_URL = "http://localhost:8000";
+const BACKEND_URL = "http://localhost:7860";
+const EXTENSION_API_KEY = "phishguard-dev-key"; // Should match .env
+
 
 const PHISH_KEYWORDS = [
   "login", "signin", "sign-in", "verify", "account",
@@ -57,6 +61,27 @@ const SHORTENER_DOMAINS = new Set([
   "is.gd", "buff.ly", "rebrand.ly", "cutt.ly",
 ]);
 
+// ── NEW: Suspicious hosting/tunnel providers ──────────────────────────────
+const SUSPICIOUS_HOSTING = new Set([
+  "trycloudflare.com",
+  "ngrok.io", "ngrok-free.app", "ngrok.app",
+  "workers.dev",
+  "pages.dev",
+  "netlify.app",
+  "vercel.app",
+  "herokuapp.com",
+  "glitch.me",
+  "repl.co", "replit.dev",
+  "firebaseapp.com",
+  "web.app",
+  "onrender.com",
+  "fly.dev",
+  "railway.app",
+  "surge.sh",
+  "000webhostapp.com",
+  "infinityfreeapp.com",
+]);
+
 // Top legitimate domains — skip analysis entirely
 const WHITELIST = new Set([
   "google.com", "www.google.com", "youtube.com", "www.youtube.com",
@@ -71,7 +96,25 @@ const WHITELIST = new Set([
   "zoom.us", "spotify.com", "open.spotify.com",
   "adobe.com", "dropbox.com", "slack.com", "paypal.com", "www.paypal.com",
   "ebay.com", "www.ebay.com", "cnn.com", "bbc.com", "bbc.co.uk",
+  "microsoftonline.com"
 ]);
+
+// ── NEW: Brand domains for spoofing detection ─────────────────────────────
+const BRAND_DOMAINS = {
+  paypal:    ["paypal.com"],
+  google:    ["google.com", "gmail.com", "accounts.google.com"],
+  microsoft: ["microsoft.com", "outlook.com", "live.com", "office.com"],
+  apple:     ["apple.com", "icloud.com"],
+  amazon:    ["amazon.com", "amazon.co.uk", "amazon.in"],
+  facebook:  ["facebook.com", "fb.com"],
+  netflix:   ["netflix.com"],
+  instagram: ["instagram.com"],
+  twitter:   ["twitter.com", "x.com"],
+  linkedin:  ["linkedin.com"],
+  chase:     ["chase.com"],
+  wells:     ["wellsfargo.com"],
+  bank:      ["bankofamerica.com"],
+};
 
 // ── Feature Names (must match training order exactly) ─────────────────────
 const FEATURE_NAMES = [
@@ -122,6 +165,62 @@ function shannonEntropy(text) {
     entropy -= p * Math.log2(p);
   }
   return entropy;
+}
+
+// ── NEW: Domain trust check ───────────────────────────────────────────────
+function checkDomainTrust(hostname) {
+  if (WHITELIST.has(hostname)) {
+    return { trusted: true, reason: "Domain is in the trusted whitelist" };
+  }
+  
+  // Also check if any trusted domain is a suffix (e.g., accounts.google.com -> .google.com)
+  for (const trusted of WHITELIST) {
+    if (hostname.endsWith("." + trusted)) {
+      return { trusted: true, reason: "Subdomain of trusted domain" };
+    }
+  }
+  
+  return { trusted: false, reason: null };
+}
+
+// ── NEW: Brand spoofing detection ─────────────────────────────────────────
+function detectBrandSpoofing(hostname) {
+  const lower = hostname.toLowerCase();
+  for (const [brand, domains] of Object.entries(BRAND_DOMAINS)) {
+    // Check if hostname contains the brand name but isn't the real domain
+    if (lower.includes(brand)) {
+      const isLegit = domains.some(d => lower === d || lower.endsWith("." + d));
+      if (!isLegit) {
+        return { isSpoofing: true, brand };
+      }
+    }
+  }
+  return { isSpoofing: false, brand: null };
+}
+
+// ── NEW: Suspicious hosting detection ─────────────────────────────────────
+function isSuspiciousHosting(hostname) {
+  const lower = hostname.toLowerCase();
+  for (const provider of SUSPICIOUS_HOSTING) {
+    if (lower.endsWith(provider) || lower.endsWith("." + provider)) {
+      return provider;
+    }
+  }
+  return null;
+}
+
+// ── NEW: Path keyword detection ───────────────────────────────────────────
+function checkPathKeywords(pathname) {
+  const lower = pathname.toLowerCase();
+  const keywords = [
+    "login", "signin", "sign-in", "log-in",
+    "verify", "verification", "validate",
+    "account", "myaccount", "secure", "security",
+    "password", "reset", "recovery",
+    "banking", "payment", "checkout", "wallet",
+    "webmail", "roundcube",
+  ];
+  return keywords.filter(kw => lower.includes(kw));
 }
 
 /**
@@ -338,113 +437,181 @@ function storeResult(tabId, result) {
 
 /**
  * Main analysis function — called on every navigation.
+ * FIXED: Verdict monotonicity, suspicious hosting, path keywords.
  */
 async function analyzeUrl(tabId, url) {
-  // Skip non-HTTP URLs
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    updateBadge(tabId, "safe", 0);
+    updateBadge(tabId, "safe");
     return;
   }
 
-  // Skip chrome://, chrome-extension://, about:, etc.
-  try {
-    const parsed = new URL(url);
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      return;
-    }
+  let parsed;
+  try { parsed = new URL(url); } catch { return; }
+  if (!["http:", "https:"].includes(parsed.protocol)) return;
 
-    // Whitelist check
-    const hostname = parsed.hostname.toLowerCase();
-    if (WHITELIST.has(hostname)) {
-      const result = {
-        url,
-        verdict: "safe",
-        score: 0.0,
-        source: "whitelist",
-        reasons: ["Domain is in the trusted whitelist"],
-      };
-      storeResult(tabId, result);
-      updateBadge(tabId, "safe", 0);
-      return;
-    }
-  } catch {
+  const hostname = parsed.hostname.toLowerCase();
+
+  // ── STEP 1: Domain trust check ──────────────────────────────────────
+  const trust = checkDomainTrust(hostname);
+  if (trust.trusted) {
+    const result = {
+      url, verdict: "safe", score: 0.0, source: "whitelist",
+      reasons: [trust.reason],
+    };
+    storeResult(tabId, result);
+    updateBadge(tabId, "safe");
+    console.log(`[PhishGuard] TRUSTED: ${hostname}`);
     return;
   }
 
-  // Extract features
+  // ── STEP 2: ML inference ────────────────────────────────────────────
   const features = extractLexicalFeatures(url);
-  if (!features) {
-    updateBadge(tabId, "safe", 0);
-    return;
+  if (!features) { updateBadge(tabId, "safe"); return; }
+
+  const mlScore = await runInference(features);
+  let finalScore = mlScore;
+  const reasons = [];
+
+  console.log(`[PhishGuard] ${hostname} — ML: ${mlScore.toFixed(3)}`);
+
+  // ── STEP 3: Domain-level signals ────────────────────────────────────
+
+  // 3a: Brand spoofing
+  const brandCheck = detectBrandSpoofing(hostname);
+  if (brandCheck.isSpoofing) {
+    finalScore = Math.min(1.0, finalScore + 0.40);
+    reasons.push(`Domain impersonates "${brandCheck.brand}"`);
   }
 
-  // Run local ML inference
-  const phishProb = await runInference(features);
-  console.log(`[PhishGuard] ${url} → local score: ${phishProb.toFixed(3)}`);
-
-  // Determine verdict from local score
-  let verdict;
-  if (phishProb >= 0.7) {
-    verdict = "phishing";
-  } else if (phishProb >= 0.3) {
-    verdict = "suspicious";
-  } else {
-    verdict = "safe";
+  // 3b: Suspicious hosting/tunnel provider (NEW — catches trycloudflare.com)
+  const hostingProvider = isSuspiciousHosting(hostname);
+  if (hostingProvider) {
+    finalScore = Math.min(1.0, finalScore + 0.20);
+    reasons.push(`Hosted on suspicious provider: ${hostingProvider}`);
   }
 
-  let result = {
-    url,
-    verdict,
-    score: phishProb,
-    source: "local_ml",
-    reasons: [],
-  };
+  // 3c: IP address
+  if (features.f17_isIpAddress === 1) {
+    finalScore = Math.min(1.0, finalScore + 0.30);
+    reasons.push("URL uses IP address instead of domain");
+  }
 
-  // If ambiguous (0.3–0.8), escalate to backend for full analysis
-  if (phishProb >= 0.3 && phishProb <= 0.8) {
+  // 3d: @ symbol
+  if (features.f10_atSymbolCount > 0) {
+    finalScore = Math.min(1.0, finalScore + 0.25);
+    reasons.push("URL contains @ symbol (obfuscation)");
+  }
+
+  // 3e: Punycode
+  if (features.f25_hasPunycode === 1) {
+    finalScore = Math.min(1.0, finalScore + 0.20);
+    reasons.push("Internationalized domain (homograph risk)");
+  }
+
+  // 3f: Suspicious TLD + phishing keywords
+  const isSusTLD = features.f24_hasSuspiciousTld === 1;
+  const hasKW = features.f27_keywordHits >= 2;
+
+  if (isSusTLD && hasKW) {
+    finalScore = Math.min(1.0, finalScore + 0.30);
+    reasons.push("Suspicious TLD with phishing keywords");
+  } else if (isSusTLD) {
+    finalScore = Math.min(1.0, finalScore + 0.10);
+    reasons.push("Suspicious top-level domain");
+  }
+
+  // 3g: Path keywords (NEW — catches /login.html, /signin, etc.)
+  // Only applies when domain is ALSO suspicious
+  const pathKW = checkPathKeywords(parsed.pathname);
+  if (pathKW.length >= 2 && (isSusTLD || hostingProvider || brandCheck.isSpoofing)) {
+    finalScore = Math.min(1.0, finalScore + 0.15);
+    reasons.push(`Suspicious path: ${pathKW.slice(0, 3).join(", ")}`);
+  }
+
+  // 3h: URL shortener
+  if (features.f26_isShortener === 1) {
+    finalScore = Math.min(1.0, finalScore + 0.10);
+    reasons.push("URL shortener — destination unknown");
+  }
+
+  // 3i: No HTTPS on suspicious domain
+  if (!features.f23_isHttps && (isSusTLD || hostingProvider)) {
+    finalScore = Math.min(1.0, finalScore + 0.10);
+    reasons.push("No HTTPS on suspicious domain");
+  }
+
+  finalScore = Math.max(0, Math.min(1.0, finalScore));
+
+  // ── STEP 4: Local verdict ───────────────────────────────────────────
+  let localVerdict;
+  if (finalScore >= 0.65) localVerdict = "phishing";
+  else if (finalScore >= 0.35) localVerdict = "suspicious";
+  else localVerdict = "safe";
+
+  if (localVerdict === "safe" && reasons.length === 0) {
+    reasons.push("No phishing indicators detected");
+  }
+
+  let result = { url, verdict: localVerdict, score: finalScore, source: "local_ml", reasons };
+
+  console.log(`[PhishGuard] ${hostname} — final: ${finalScore.toFixed(3)} → ${localVerdict}`);
+
+  // ── STEP 5: Backend escalation with VERDICT MONOTONICITY ────────────
+  // Key fix: Backend can only UPGRADE the verdict, never downgrade it.
+  // If local says "phishing", backend cannot flip it to "safe".
+
+  const shouldEscalate = finalScore >= 0.25 || brandCheck.isSpoofing || hostingProvider;
+
+  if (shouldEscalate) {
     try {
-      const backendResult = await escalateToBackend(tabId, url, phishProb);
-      if (backendResult) {
+      const br = await escalateToBackend(tabId, url, finalScore);
+      if (br) {
+        const backendScore = br.score || 0;
+
+        // ══════════════════════════════════════════════════════════
+        // VERDICT MONOTONICITY: Take the MAXIMUM of local and backend
+        // Backend can enrich with reasons but NEVER lower the score
+        // ══════════════════════════════════════════════════════════
+        const mergedScore = Math.max(finalScore, backendScore);
+        const mergedVerdict = mergedScore >= 0.65 ? "phishing" :
+                              mergedScore >= 0.35 ? "suspicious" : "safe";
+
+        // Merge reasons (deduplicated)
+        const allReasons = [...new Set([...reasons, ...(br.reasons || [])])];
+
         result = {
           url,
-          verdict: backendResult.verdict,
-          score: backendResult.score,
-          source: "backend",
-          reasons: backendResult.reasons || [],
-          visual: backendResult.visual_analysis || null,
-          signals: backendResult.signals || [],
+          verdict: mergedVerdict,
+          score: mergedScore,
+          source: "backend+local",
+          reasons: allReasons,
+          visual: br.visual_analysis || null,
+          signals: br.signals || [],
         };
-        verdict = backendResult.verdict;
+
+        // Log if backend tried to downgrade (for debugging)
+        if (backendScore < finalScore) {
+          console.log(`[PhishGuard] Backend tried to downgrade: ${backendScore.toFixed(3)} < ${finalScore.toFixed(3)} — BLOCKED`);
+        }
       }
-    } catch (err) {
-      console.warn("[PhishGuard] Backend escalation failed:", err.message);
-      // Keep local verdict
+    } catch (e) {
+      console.debug("[PhishGuard] Backend unavailable:", e.message);
     }
   }
 
-  // Add reasons based on features
-  if (features.f17_isIpAddress) result.reasons.push("URL uses IP address");
-  if (features.f24_hasSuspiciousTld) result.reasons.push("Suspicious TLD detected");
-  if (features.f25_hasPunycode) result.reasons.push("Punycode/IDN domain");
-  if (features.f26_isShortener) result.reasons.push("URL shortener detected");
-  if (features.f27_keywordHits >= 3) result.reasons.push("Multiple phishing keywords in URL");
-
   storeResult(tabId, result);
-  updateBadge(tabId, verdict, result.score);
+  updateBadge(tabId, result.verdict);
 
-  // If phishing, show warning notification
-  if (verdict === "phishing") {
+  if (result.verdict === "phishing") {
     try {
-      chrome.notifications.create(`phish-${tabId}`, {
+      chrome.notifications.create(`phish-${tabId}-${Date.now()}`, {
         type: "basic",
         iconUrl: chrome.runtime.getURL("icons/danger-128.png"),
-        title: "⚠️ Phishing Warning",
-        message: `This page may be a phishing attempt!\n${url.substring(0, 80)}`,
+        title: "⚠️ PhishGuard: Threat Detected",
+        message: `${reasons[0] || "Phishing detected"}\n${url.substring(0, 60)}`,
         priority: 2,
       });
-    } catch (e) {
-      // Notifications may not be available
-    }
+    } catch(e) {}
   }
 }
 
@@ -473,7 +640,10 @@ async function escalateToBackend(tabId, url, clientScore) {
 
   const response = await fetch(`${BACKEND_URL}/api/v1/analyze/full`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      "X-API-Key": EXTENSION_API_KEY
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10000), // 10s timeout
   });
@@ -545,9 +715,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           existing.contentSignals = message.signals;
           // Boost score if content script found suspicious elements
           if (message.signals.hasBitB) {
-            existing.score = Math.min(1.0, existing.score + 0.2);
+            existing.score = Math.min(1.0, existing.score + 0.3);
             existing.reasons.push("Browser-in-the-Browser (BitB) attack detected");
-            existing.verdict = existing.score >= 0.7 ? "phishing" : "suspicious";
+            existing.verdict = existing.score >= 0.65 ? "phishing" : "suspicious";
+            updateBadge(tabId, existing.verdict, existing.score);
+          }
+          // Boost for brand impersonation detected in content
+          if (message.signals.hasBrandImpersonation) {
+            existing.score = Math.min(1.0, existing.score + 0.25);
+            existing.reasons.push(`Content impersonates ${message.signals.brandDetected}`);
+            existing.verdict = existing.score >= 0.65 ? "phishing" : "suspicious";
             updateBadge(tabId, existing.verdict, existing.score);
           }
           storeResult(tabId, existing);
@@ -575,10 +752,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function syncThreatFeed() {
   try {
     // First trigger backend to update its feeds
-    await fetch(`${BACKEND_URL}/api/v1/feed/update`, { method: "POST" });
+    await fetch(`${BACKEND_URL}/api/v1/feed/update`, { 
+      method: "POST",
+      headers: { "X-API-Key": EXTENSION_API_KEY }
+    });
 
     // Then fetch the generated rules
-    const response = await fetch(`${BACKEND_URL}/api/v1/feed/rules`);
+    const response = await fetch(`${BACKEND_URL}/api/v1/feed/rules`, {
+      headers: { "X-API-Key": EXTENSION_API_KEY }
+    });
     if (!response.ok) return;
 
     const data = await response.json();

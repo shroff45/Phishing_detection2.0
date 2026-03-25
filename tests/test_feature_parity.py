@@ -16,7 +16,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
-from app.services.threat_intel import extract_url_features
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ml-training"))
+from build_dataset import extract_features as extract_url_features
 
 
 # URLs that exercise edge cases in both parsers
@@ -76,7 +77,7 @@ if (features.error) {
 
     def _extract_js_function(self, sw_path):
         """Extract the extractLexicalFeatures function from service-worker.js"""
-        content = sw_path.read_text()
+        content = sw_path.read_text(encoding="utf-8")
 
         # Find the function
         start_marker = "function extractLexicalFeatures(rawUrl)"

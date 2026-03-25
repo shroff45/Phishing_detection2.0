@@ -216,7 +216,7 @@
         try {
           chrome.runtime.sendMessage({ type: "CONTENT_SIGNALS", signals: { ...signals } });
         } catch (e) {}
-      }, 3500);
+      }, 1500);
     } catch (err) {}
   }
 

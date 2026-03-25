@@ -1,0 +1,9 @@
+# PhishGuard ML Pipeline v4.1 — Dependencies
+scikit-learn>=1.3
+pandas>=2.0
+numpy>=1.24
+onnxruntime>=1.16
+skl2onnx>=1.16
+httpx>=0.24
+xgboost>=2.0
+lightgbm>=4.0

@@ -12,7 +12,7 @@ except ImportError:
 class Settings(BaseSettings):
     # Server
     HOST: str = Field(default="0.0.0.0")
-    PORT: int = Field(default=8000)
+    PORT: int = Field(default=7860)
     DEBUG: bool = Field(default=True)
 
     # Redis (optional — server works fine without it)
@@ -21,9 +21,13 @@ class Settings(BaseSettings):
     # Threat intelligence API keys (optional — enhances detection)
     PHISHTANK_API_KEY: str = Field(default="")
     VIRUSTOTAL_API_KEY: str = Field(default="")
+    GOOGLE_SAFE_BROWSING_KEY: str = Field(default="")
 
     # Rate limiting
     RATE_LIMIT: str = Field(default="100/minute")
+
+    # API authentication (optional — skip auth if empty)
+    EXTENSION_API_KEY: str = Field(default="")
 
     class Config:
         env_file = ".env"

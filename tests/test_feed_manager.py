@@ -1,50 +1,91 @@
+"""
+PhishGuard — Unit Tests: Feed Manager
+Tests the public FeedManager API and module-level helpers.
+"""
+
 import pytest
 from unittest.mock import patch, MagicMock
-from app.services.feed_manager import FeedManager
-import httpx
+from app.services.feed_manager import FeedManager, _domain_to_rule, feed_manager
 
-@pytest.fixture
-def feed_manager():
-    return FeedManager(redis_url="redis://localhost:6379/1")
 
-def test_deduplicate_domains(feed_manager):
-    domains = [
-        "example.com",
-        "phish.example.com",
-        "example.com/",
-        "http://example.com/login",
-        "other.com"
-    ]
-    
-    clean = feed_manager._deduplicate_domains(domains)
-    assert len(clean) == 2
-    assert "example.com" in clean
-    assert "other.com" in clean
+class TestFeedManagerPublicAPI:
+    """Tests for FeedManager class public interface."""
+
+    def test_initial_state(self):
+        stats = feed_manager.get_stats()
+        assert "is_loaded" in stats
+        assert "total_rules" in stats
+        assert "last_update" in stats
+
+    def test_get_rules_returns_list(self):
+        rules = feed_manager.get_rules(limit=10)
+        assert isinstance(rules, list)
+
+    def test_get_stats_keys(self):
+        stats = feed_manager.get_stats()
+        assert "total_rules" in stats
+        assert "last_update" in stats
+        assert "is_loaded" in stats
+
+    def test_is_domain_blocked_returns_bool(self):
+        result = feed_manager.is_domain_blocked("example.com")
+        assert isinstance(result, bool)
+
+    def test_whitelisted_domains_never_blocked(self):
+        """Whitelisted domains must never be flagged as blocked."""
+        for domain in ["google.com", "github.com", "microsoft.com", "apple.com"]:
+            assert feed_manager.is_domain_blocked(domain) is False, (
+                f"Whitelisted domain {domain} was blocked!"
+            )
+
+    def test_total_rules_property(self):
+        total = feed_manager.total_rules
+        assert isinstance(total, int)
+        assert total >= 0
+
+
+class TestDomainToRule:
+    """Tests for the _domain_to_rule helper function."""
+
+    def test_rule_structure(self):
+        rule = _domain_to_rule("evil.com", 1001)
+        assert rule["id"] == 1001
+        assert rule["priority"] == 1
+        assert rule["action"]["type"] == "block"
+        assert "||evil.com" in rule["condition"]["urlFilter"]
+        assert "main_frame" in rule["condition"]["resourceTypes"]
+
+    def test_rule_id_increments(self):
+        r1 = _domain_to_rule("a.com", 100)
+        r2 = _domain_to_rule("b.com", 101)
+        assert r1["id"] == 100
+        assert r2["id"] == 101
+
+    def test_url_filter_format(self):
+        rule = _domain_to_rule("phishing.xyz", 500)
+        assert rule["condition"]["urlFilter"] == "||phishing.xyz"
+
 
 @pytest.mark.asyncio
-@patch('httpx.AsyncClient.get')
-async def test_fetch_openphish(mock_get, feed_manager):
-    # Mock OpenPhish response
-    mock_resp = MagicMock()
-    mock_resp.text = "http://bad1.com/login\nhttps://bad2.com/secure\n"
-    mock_resp.raise_for_status.return_value = None
-    mock_get.return_value = mock_resp
-    
-    domains = await feed_manager._fetch_openphish()
-    assert len(domains) == 2
-    assert "bad1.com" in domains
-    assert "bad2.com" in domains
+class TestFeedUpdate:
+    """Tests for feed update lifecycle."""
 
-def test_generate_chrome_rules(feed_manager):
-    domains = {"bad1.com", "bad2.com"}
-    rules = feed_manager._generate_chrome_rules(domains)
-    
-    assert len(rules) == 2
-    
-    # Check rule structure
-    rule1 = rules[0]
-    assert rule1["id"] == 1
-    assert rule1["priority"] == 100
-    assert rule1["action"]["type"] == "block"
-    assert "bad" in rule1["condition"]["urlFilter"]
-    assert "main_frame" in rule1["condition"]["resourceTypes"]
+    async def test_update_feeds_returns_stats(self):
+        with patch("app.services.feed_manager._fetch_openphish", return_value={"a.com", "b.com"}), \
+             patch("app.services.feed_manager._fetch_phishtank", return_value=set()), \
+             patch("app.services.feed_manager._fetch_phishing_database", return_value=set()), \
+             patch("app.services.feed_manager._fetch_urlhaus", return_value=set()):
+            stats = await feed_manager.update_feeds()
+            assert "total_domains" in stats
+            assert "sources" in stats
+            assert "rules_generated" in stats
+            assert "elapsed" in stats
+
+    async def test_rules_available_after_update(self):
+        with patch("app.services.feed_manager._fetch_openphish", return_value={"test.com"}), \
+             patch("app.services.feed_manager._fetch_phishtank", return_value=set()), \
+             patch("app.services.feed_manager._fetch_phishing_database", return_value=set()), \
+             patch("app.services.feed_manager._fetch_urlhaus", return_value=set()):
+            await feed_manager.update_feeds()
+            rules = feed_manager.get_rules(limit=10)
+            assert isinstance(rules, list)

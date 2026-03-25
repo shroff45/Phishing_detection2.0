@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import structlog
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from app.config import settings
 from app.services.visual_analyzer import visual_analyzer
 from app.services.threat_intel import compute_meta_score, check_threat_feeds
 from app.services.feed_manager import feed_manager
+from app.middleware.auth import verify_api_key
 
 # Logging
 structlog.configure(
@@ -43,10 +44,16 @@ try:
 except ImportError:
     logger.debug("privacy_middleware_not_found")
 
-# CORS
+# CORS — allow Chrome extension origins explicitly
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "chrome-extension://*",
+    ],
+    allow_origin_regex=r"^chrome-extension://.*$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,11 +61,11 @@ app.add_middleware(
 
 class QuickCheckRequest(BaseModel):
     url: str
-    client_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    client_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
 class FullAnalysisRequest(BaseModel):
     url: str
-    client_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    client_score: float = Field(default=0.0, ge=0.0, le=1.0)
     screenshot_base64: Optional[str] = None
 
 @app.get("/health")
@@ -74,7 +81,7 @@ async def health_check():
         },
     }
 
-@app.post("/api/v1/analyze/quick")
+@app.post("/api/v1/analyze/quick", dependencies=[Depends(verify_api_key)])
 async def analyze_quick(request: QuickCheckRequest):
     try:
         threat_result = await check_threat_feeds(request.url)
@@ -85,11 +92,20 @@ async def analyze_quick(request: QuickCheckRequest):
             threat_result["source"] = "phishguard_feed"
         
         meta = compute_meta_score(url=request.url, client_score=request.client_score, threat_feed_result=threat_result)
-        return {"url": request.url, "verdict": meta["verdict"], "score": meta["final_score"], "threat_feed": threat_result}
+        return {
+            "url": request.url, 
+            "verdict": meta["verdict"], 
+            "score": meta["final_score"], 
+            "confidence": meta.get("confidence", 0.0),
+            "reasons": meta.get("reasons", []),
+            "signals": meta.get("signals", []),
+            "threat_feed": threat_result
+        }
     except Exception as e:
+        logger.error("quick_analysis_failed", error=str(e), url=str(request.url))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/analyze/full")
+@app.post("/api/v1/analyze/full", dependencies=[Depends(verify_api_key)])
 async def analyze_full(request: FullAnalysisRequest):
     try:
         threat_result = await check_threat_feeds(request.url)
@@ -99,22 +115,33 @@ async def analyze_full(request: FullAnalysisRequest):
             threat_result["is_known_threat"] = True
 
         visual_result = None
-        if request.screenshot_base64:
-            b64_data = request.screenshot_base64
-            if "," in b64_data: b64_data = b64_data.split(",", 1)[1]
+        b64_data = request.screenshot_base64
+        if b64_data and isinstance(b64_data, str):
+            if "," in b64_data: 
+                b64_data = b64_data.split(",", 1)[1]
             visual_result = await visual_analyzer.analyze_screenshot(base64.b64decode(b64_data), domain)
 
         meta = compute_meta_score(url=request.url, client_score=request.client_score, threat_feed_result=threat_result, visual_result=visual_result)
-        return {"url": request.url, "verdict": meta["verdict"], "score": meta["final_score"], "visual_analysis": visual_result}
+        return {
+            "url": request.url, 
+            "verdict": meta["verdict"], 
+            "score": meta["final_score"], 
+            "confidence": meta.get("confidence", 0.0),
+            "reasons": meta.get("reasons", []),
+            "signals": meta.get("signals", []),
+            "threat_feed": threat_result,
+            "visual_analysis": visual_result
+        }
     except Exception as e:
+        logger.error("full_analysis_failed", error=str(e), url=str(request.url))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/feed/update")
+@app.post("/api/v1/feed/update", dependencies=[Depends(verify_api_key)])
 async def update_feeds():
     stats = await feed_manager.update_feeds()
     return {"success": True, "stats": stats}
 
-@app.get("/api/v1/feed/rules")
+@app.get("/api/v1/feed/rules", dependencies=[Depends(verify_api_key)])
 async def get_feed_rules(limit: int = 5000, offset: int = 0):
     return {"rules": feed_manager.get_rules(limit, offset), "total": feed_manager.total_rules}
 
