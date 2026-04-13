@@ -7,6 +7,8 @@ import asyncio
 import base64
 import re
 import math
+import time
+from collections import OrderedDict
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse
@@ -98,6 +100,33 @@ PHISHING_PATTERNS = [
     r"unusual.*activity",
 ]
 
+
+
+# ── Global Cache for Threat Feeds ─────────────────────────────────────────
+class ThreatFeedCache:
+    def __init__(self, capacity: int = 1000, ttl_seconds: int = 3600):
+        self.capacity = capacity
+        self.ttl = ttl_seconds
+        self.cache = OrderedDict()
+
+    def get(self, key):
+        if key not in self.cache:
+            return None
+        value, timestamp = self.cache[key]
+        if time.time() - timestamp > self.ttl:
+            del self.cache[key]
+            return None
+        self.cache.move_to_end(key)
+        return value
+
+    def set(self, key, value):
+        if key in self.cache:
+            del self.cache[key]
+        elif len(self.cache) >= self.capacity:
+            self.cache.popitem(last=False)
+        self.cache[key] = (value, time.time())
+
+_threat_cache = ThreatFeedCache()
 
 # ═══════════════════════════════════════════════════════════════════════════
 # THREAT FEED CHECKING (URLHaus, VirusTotal, Google Safe Browsing)
@@ -252,7 +281,15 @@ async def check_threat_feeds(url: str) -> dict:
                 "confidence": 1.0
             }
 
+
+    # 2. Check Cache
+    cached = _threat_cache.get(url)
+    if cached:
+        logger.debug("threat_feed_cache_hit", url=url)
+        return cached
+
     result = {
+
         "is_known_threat": False,
         "source":          None,
         "threat_type":     None,
@@ -287,6 +324,7 @@ async def check_threat_feeds(url: str) -> dict:
                 result["threat_type"] = entry.get("threat_type")
                 result["confidence"] = 1.0
 
+    _threat_cache.set(url, result)
     return result
 
 
